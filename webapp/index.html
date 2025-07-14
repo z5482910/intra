@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Intranet</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            padding: 2em;
+            background: #f9f9f9;
+        }
+
+        h1, h2 {
+            color: #333;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 0.6em;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-bottom: 1em;
+            font-size: 1em;
+        }
+
+        .row {
+            display: flex;
+            gap: 1em;
+            margin-bottom: 0.5em;
+        }
+
+        .row input {
+            flex: 1;
+        }
+
+        .shortcut {
+            background: #fff;
+            padding: 0.8em 1em;
+            margin-bottom: 0.5em;
+            border-left: 4px solid #007bff;
+            border-radius: 4px;
+        }
+
+        .shortcut-title {
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        .shortcut-link {
+            display: block;
+            color: #555;
+            margin-top: 4px;
+            word-break: break-all;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .buttons {
+            margin-top: 1em;
+        }
+
+        button {
+            padding: 0.5em 1.2em;
+            margin-right: 0.5em;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.95em;
+            cursor: pointer;
+        }
+
+        #edit-toggle {
+            background: #007bff;
+            color: white;
+        }
+
+        #save-btn {
+            background: #28a745;
+            color: white;
+        }
+
+        #cancel-btn {
+            background: #dc3545;
+            color: white;
+        }
+
+        #add-link-btn {
+            background: #17a2b8;
+            color: white;
+        }
+
+        #clear-links-btn {
+            background: #ffc107;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <h1 id="view-title"></h1>
+    <input id="edit-title" class="hidden" placeholder="Page Title">
+
+    <p id="view-content"></p>
+    <textarea id="edit-content" class="hidden" rows="6" placeholder="Page content..."></textarea>
+
+    <h2>Shortcut Links</h2>
+    <div id="view-links"></div>
+    <div id="edit-links" class="hidden"></div>
+
+    <div class="buttons">
+        <button id="edit-toggle" onclick="toggleEdit(true)">✏️ Edit</button>
+        <button id="save-btn" class="hidden" onclick="save()">💾 Save</button>
+        <button id="cancel-btn" class="hidden" onclick="toggleEdit(false)">❌ Cancel</button>
+        <button id="add-link-btn" class="hidden" onclick="addLink()">➕ Add Shortcut</button>
+        <button id="clear-links-btn" class="hidden" onclick="clearLinks()">🗑️ Clear Shortcuts</button>
+    </div>
+
+    <script>
+        let currentData = {};
+
+        async function load() {
+            let res = await fetch("/load");
+            currentData = await res.json();
+            renderViewMode();
+        }
+
+        function renderViewMode() {
+            document.getElementById("view-title").innerText = currentData.title;
+            document.getElementById("view-content").innerText = currentData.content;
+
+            let viewLinks = document.getElementById("view-links");
+            viewLinks.innerHTML = "";
+
+            currentData.links.forEach(link => {
+                let div = document.createElement("div");
+                div.className = "shortcut";
+                div.innerHTML = `
+                    <div class="shortcut-title">${link.title}</div>
+                    <a class="shortcut-link" href="${link.url}" target="_blank">${link.url}</a>
+                `;
+                viewLinks.appendChild(div);
+            });
+        }
+
+        function toggleEdit(on) {
+            // Toggle visibility
+            document.getElementById("view-title").classList.toggle("hidden", on);
+            document.getElementById("view-content").classList.toggle("hidden", on);
+            document.getElementById("view-links").classList.toggle("hidden", on);
+            document.getElementById("edit-title").classList.toggle("hidden", !on);
+            document.getElementById("edit-content").classList.toggle("hidden", !on);
+            document.getElementById("edit-links").classList.toggle("hidden", !on);
+            document.getElementById("save-btn").classList.toggle("hidden", !on);
+            document.getElementById("cancel-btn").classList.toggle("hidden", !on);
+            document.getElementById("add-link-btn").classList.toggle("hidden", !on);
+            document.getElementById("clear-links-btn").classList.toggle("hidden", !on);
+            document.getElementById("edit-toggle").classList.toggle("hidden", on);
+
+            if (on) {
+                document.getElementById("edit-title").value = currentData.title;
+                document.getElementById("edit-content").value = currentData.content;
+                renderEditableLinks();
+            }
+        }
+
+        function renderEditableLinks() {
+            let container = document.getElementById("edit-links");
+            container.innerHTML = "";
+            currentData.links.forEach(link => {
+                let row = document.createElement("div");
+                row.className = "row";
+                row.innerHTML = `
+                    <input name="link_title[]" value="${link.title}" placeholder="Title">
+                    <input name="link_url[]" value="${link.url}" placeholder="URL">
+                `;
+                container.appendChild(row);
+            });
+        }
+
+        function addLink() {
+            let row = document.createElement("div");
+            row.className = "row";
+            row.innerHTML = `
+                <input name="link_title[]" placeholder="Title">
+                <input name="link_url[]" placeholder="URL">
+            `;
+            document.getElementById("edit-links").appendChild(row);
+        }
+
+        function clearLinks() {
+            document.getElementById("edit-links").innerHTML = "";
+        }
+
+        async function save() {
+            let links = [...document.querySelectorAll("#edit-links .row")].map(row => {
+                let [title, url] = row.querySelectorAll("input");
+                return { title: title.value, url: url.value };
+            }).filter(link => link.title && link.url);
+
+            let newData = {
+                title: document.getElementById("edit-title").value,
+                content: document.getElementById("edit-content").value,
+                links: links
+            };
+
+            let res = await fetch("/save", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify(newData)
+            });
+
+            if (res.ok) {
+                currentData = newData;
+                toggleEdit(false);
+                renderViewMode();
+                alert("Saved!");
+            } else {
+                alert("Failed to save.");
+            }
+        }
+
+        load();
+    </script>
+</body>
+</html>
